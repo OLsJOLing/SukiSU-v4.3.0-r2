@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+﻿/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2023 bmax121. All Rights Reserved.
  */
@@ -188,7 +188,7 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
     info.dst = dst;
     info.src = src;
     info.len = len;
-    info.cpu_count = ATOMIC_INIT(0);
+    atomic_set(&info.cpu_count, 0);
     info.flags = flags;
 
     ret = stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
