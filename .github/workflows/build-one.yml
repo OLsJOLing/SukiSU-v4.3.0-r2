@@ -1,8 +1,9 @@
 name: Build LKM android15-6.6
 
 # Minimal one-KMI build for the jinghu (Xiaomi 25032RP42C, 6.6.118-android15) test.
-# Mirrors the build line used by the official ddk-lkm.yml, without the reusable-workflow
-# input plumbing that breaks on manual dispatch.
+# Mirrors the DDK build environment that scripts/ddk sets up:
+#   KDIR=/opt/ddk/kdir/<kmi>, ARCH=arm64, CROSS_COMPILE=aarch64-linux-gnu-, LLVM=1, LLVM_IAS=1
+# On failure the build log is uploaded as the "build-log" artifact.
 
 on:
   workflow_dispatch:
@@ -19,15 +20,52 @@ jobs:
 
       - name: Build kernelsu.ko
         run: |
-          set -e
+          set -o pipefail
+          exec > >(tee -a "$GITHUB_WORKSPACE/build.log") 2>&1
+          set -x
+
+          git config --global --add safe.directory '*'
+
+          echo "== env =="
+          env | sort | grep -E '^(KDIR|ARCH|CROSS_COMPILE|LLVM|LLVM_IAS|CC|PATH)=' || true
+          echo "== /opt/ddk =="
+          ls -la /opt/ddk || true
+          echo "== /opt/ddk/kdir =="
+          ls -la /opt/ddk/kdir || true
+
+          TARGET=android15-6.6
+          if [ -z "${KDIR:-}" ] && [ -d "/opt/ddk/kdir/$TARGET" ]; then
+            export KDIR="/opt/ddk/kdir/$TARGET"
+          fi
+          export ARCH="${ARCH:-arm64}"
+          export CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
+          export LLVM=1
+          export LLVM_IAS=1
+          for d in /opt/ddk/clang/*/bin; do
+            [ -d "$d" ] && export PATH="$d:$PATH"
+          done
+          echo "KDIR=$KDIR"
+          echo "ARCH=$ARCH"
+          echo "CROSS_COMPILE=$CROSS_COMPILE"
+          command -v clang || true
+
           cd kernel
           CONFIG_KSU=m CONFIG_KPM=y CC=clang make
+
           mkdir -p out
           cp kernelsu.ko out/android15-6.6_kernelsu.ko
           llvm-strip -d out/android15-6.6_kernelsu.ko
           ls -la out
 
-      - name: Upload artifact
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Upload kernelsu.ko
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: aarch64-android15-6.6-lkm
