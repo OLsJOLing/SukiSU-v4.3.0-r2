@@ -1,0 +1,34 @@
+name: Build LKM android15-6.6
+
+# Minimal one-KMI build for the jinghu (Xiaomi 25032RP42C, 6.6.118-android15) test.
+# Mirrors the build line used by the official ddk-lkm.yml, without the reusable-workflow
+# input plumbing that breaks on manual dispatch.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android15-6.6-20260828
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build kernelsu.ko
+        run: |
+          set -e
+          cd kernel
+          CONFIG_KSU=m CONFIG_KPM=y CC=clang make
+          mkdir -p out
+          cp kernelsu.ko out/android15-6.6_kernelsu.ko
+          llvm-strip -d out/android15-6.6_kernelsu.ko
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: aarch64-android15-6.6-lkm
+          path: kernel/out/android15-6.6_kernelsu.ko
