@@ -1,0 +1,61 @@
+name: Build LKM android17-6.18
+
+# Same early-install selinux_hide fix, built for the Xiaomi 15S Pro (dijun):
+# Android 17 / 6.18.21-android17 / KMI android17-6.18.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/ylarod/ddk-min:android17-6.18-20260828
+      options: --privileged
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build kernelsu.ko
+        run: |
+          set -o pipefail
+          exec > >(tee -a "$GITHUB_WORKSPACE/build-6.18.log") 2>&1
+          set -x
+
+          git config --global --add safe.directory '*'
+
+          TARGET=android17-6.18
+          if [ -z "${KDIR:-}" ] && [ -d "/opt/ddk/kdir/$TARGET" ]; then
+            export KDIR="/opt/ddk/kdir/$TARGET"
+          fi
+          export ARCH="${ARCH:-arm64}"
+          export CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
+          export LLVM=1
+          export LLVM_IAS=1
+          for d in /opt/ddk/clang/*/bin; do
+            [ -d "$d" ] && export PATH="$d:$PATH"
+          done
+          echo "KDIR=$KDIR ARCH=$ARCH"
+          command -v clang || true
+
+          cd kernel
+          CONFIG_KSU=m CONFIG_KPM=y CC=clang make
+
+          mkdir -p out
+          cp kernelsu.ko out/android17-6.18_kernelsu.ko
+          llvm-strip -d out/android17-6.18_kernelsu.ko
+          ls -la out
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log-6.18
+          path: build-6.18.log
+
+      - name: Upload kernelsu.ko
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: aarch64-android17-6.18-lkm
+          path: kernel/out/android17-6.18_kernelsu.ko

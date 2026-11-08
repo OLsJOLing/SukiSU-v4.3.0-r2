@@ -254,6 +254,12 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
         goto out_unlock;
     }
 
+    /* Publish the original before the slot can call the wrapper. */
+    WRITE_ONCE(hook->original, selected_origin);
+    hook->entry = selected_entry;
+    hook->scall = selected_scall;
+    smp_wmb();
+
     if (ksu_lsm_hook_patch_slot(selected_slot, hook->replacement)) {
         pr_err("lsm_hook: failed to patch %s\n", hook->head_name ?: "unknown");
         ret = -EFAULT;
